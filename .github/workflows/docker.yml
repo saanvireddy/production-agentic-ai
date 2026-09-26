@@ -1,0 +1,85 @@
+name: docker
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    paths: ["Dockerfile", "docker/**", "app/**", "ui/**", "requirements.txt", ".github/workflows/docker.yml"]
+
+permissions:
+  contents: read
+  id-token: write        # GitHub OIDC -> AWS (only used when pushing to ECR)
+  security-events: write # upload Trivy results to the Security tab
+
+env:
+  IMAGE: production-agentic-ai
+  UI_IMAGE: production-agentic-ai-ui
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: ${{ env.IMAGE }}:${{ github.sha }},${{ env.IMAGE }}:latest
+          build-args: APP_VERSION=${{ github.sha }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      - name: Build UI image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/ui.Dockerfile
+          load: true
+          tags: ${{ env.UI_IMAGE }}:${{ github.sha }},${{ env.UI_IMAGE }}:latest
+          cache-from: type=gha,scope=ui
+          cache-to: type=gha,mode=max,scope=ui
+
+      - name: Smoke test the API container
+        run: |
+          docker run -d --name api -p 8000:8000 \
+            -e LLM_PROVIDER=fake -e EMBEDDING_PROVIDER=hash \
+            -e AUTO_MIGRATE=false -e AUTO_SEED=false -e AUTO_INGEST=false \
+            -e JWT_SECRET=smoke-test-secret-smoke-test-secret \
+            ${{ env.IMAGE }}:${{ github.sha }}
+          for i in $(seq 1 30); do curl -sf localhost:8000/health && break; sleep 2; done
+          curl -sf localhost:8000/health | grep healthy
+          docker exec api id -u | grep -q 10001   # runs as non-root
+          docker rm -f api
+
+      - name: Scan image for vulnerabilities (Trivy)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ github.sha }}
+          format: sarif
+          output: trivy.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always() && github.event_name != 'pull_request'
+        with: { sarif_file: trivy.sarif }
+
+      # ---- Optional: push to ECR. Skipped (and costs $0) unless the AWS_ROLE_ARN repo variable is set. ----
+      - name: Configure AWS credentials (OIDC)
+        if: github.ref == 'refs/heads/main' && vars.AWS_ROLE_ARN != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      - name: Push to ECR
+        if: github.ref == 'refs/heads/main' && vars.AWS_ROLE_ARN != ''
+        run: |
+          REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${AWS_REGION}.amazonaws.com
+          aws ecr get-login-password | docker login --username AWS --password-stdin "$REGISTRY"
+          for img in "$IMAGE" "$UI_IMAGE"; do
+            docker tag "$img:${{ github.sha }}" "$REGISTRY/$img:${{ github.sha }}"
+            docker push "$REGISTRY/$img:${{ github.sha }}"
+          done

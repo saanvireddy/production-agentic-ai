@@ -1,0 +1,9 @@
+apiVersion: v2
+name: agentic-ai
+description: Production-oriented Agentic RAG + SQL platform (FastAPI, LangGraph, pgvector, Ollama)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords: [llm, rag, langgraph, fastapi, pgvector]
+maintainers:
+  - name: Akhil Sirra

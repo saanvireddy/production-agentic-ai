@@ -1,0 +1,18 @@
+[
+  {"question": "What is the company's remote work policy?", "ground_truth": "Eligible employees may work remotely up to three days per week; Tuesday and Wednesday are in-office anchor days.", "expected_source": "remote_work_policy.pdf", "expected_page": 2},
+  {"question": "How many days per week can I work remotely?", "ground_truth": "Up to three days per week.", "expected_source": "remote_work_policy.pdf", "expected_page": 2},
+  {"question": "Who is eligible for remote work?", "ground_truth": "Employees who have completed the 90-day introductory period with a rating of Meets Expectations or higher; lab technicians and facilities staff are not eligible.", "expected_source": "remote_work_policy.pdf", "expected_page": 1},
+  {"question": "How long can I work from abroad each year?", "ground_truth": "Up to 20 working days per calendar year with at least two weeks' notice.", "expected_source": "remote_work_policy.pdf", "expected_page": 3},
+  {"question": "Based on the company policies, what is the vacation policy for employees with more than 5 years of experience?", "ground_truth": "Employees with more than 5 years of service receive 25 days of paid vacation per year.", "expected_source": "leave_policy.pdf", "expected_page": 1},
+  {"question": "How many unused vacation days can be carried over?", "ground_truth": "Up to 5 unused vacation days, which must be used by March 31.", "expected_source": "leave_policy.pdf", "expected_page": 1},
+  {"question": "How much paid parental leave do non-birthing parents get?", "ground_truth": "12 weeks of fully paid parental leave.", "expected_source": "leave_policy.pdf", "expected_page": 2},
+  {"question": "When am I eligible for a sabbatical?", "ground_truth": "After 7 years of continuous service, employees get a 4-week paid sabbatical.", "expected_source": "leave_policy.pdf", "expected_page": 3},
+  {"question": "What is the 401(k) company match?", "ground_truth": "The company matches 100 percent of the first 4 percent of salary contributed, vesting after 2 years.", "expected_source": "benefits_policy.pdf", "expected_page": 1},
+  {"question": "What is the annual learning and development budget?", "ground_truth": "2,000 US dollars per employee per year; unused budget does not roll over.", "expected_source": "benefits_policy.pdf", "expected_page": 2},
+  {"question": "How much is the monthly wellness stipend?", "ground_truth": "50 US dollars per month.", "expected_source": "benefits_policy.pdf", "expected_page": 2},
+  {"question": "What is the minimum password length?", "ground_truth": "Passwords must be at least 14 characters long.", "expected_source": "security_policy.pdf", "expected_page": 1},
+  {"question": "How quickly must a security incident be reported?", "ground_truth": "Within 1 hour of discovery.", "expected_source": "security_policy.pdf", "expected_page": 2},
+  {"question": "What is the daily meal allowance when travelling?", "ground_truth": "Meals are reimbursed up to 75 US dollars per day.", "expected_source": "employee_handbook.pdf", "expected_page": 3},
+  {"question": "When are performance reviews held?", "ground_truth": "Twice a year, in March and September.", "expected_source": "employee_handbook.pdf", "expected_page": 2},
+  {"question": "Is there a home office stipend?", "ground_truth": "Employees who work remotely at least two days a week receive a one-time 500 US dollar home office stipend.", "expected_source": "employee_handbook.pdf", "expected_page": 3}
+]

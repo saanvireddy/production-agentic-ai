@@ -1,0 +1,12 @@
+[
+  {"question": "How many employees are in the Engineering department?", "gold_sql": "SELECT COUNT(*) FROM employees WHERE department = 'Engineering'"},
+  {"question": "How many employees are in Finance?", "gold_sql": "SELECT COUNT(*) FROM employees WHERE department = 'Finance'"},
+  {"question": "Compare Engineering and Finance headcount.", "gold_sql": "SELECT department, COUNT(*) FROM employees WHERE department IN ('Engineering', 'Finance') GROUP BY department"},
+  {"question": "What is the average salary per department?", "gold_sql": "SELECT department, ROUND(AVG(salary), 2) FROM employees GROUP BY department"},
+  {"question": "How many employees are based in Denver?", "gold_sql": "SELECT COUNT(*) FROM employees WHERE location = 'Denver'"},
+  {"question": "Which department has the largest budget?", "gold_sql": "SELECT name FROM departments ORDER BY budget DESC LIMIT 1"},
+  {"question": "How many employees have more than 10 years of experience?", "gold_sql": "SELECT COUNT(*) FROM employees WHERE experience_years > 10"},
+  {"question": "Who is the head of the Security department?", "gold_sql": "SELECT head FROM departments WHERE name = 'Security'"},
+  {"question": "What is the highest salary in Data Science?", "gold_sql": "SELECT MAX(salary) FROM employees WHERE department = 'Data Science'"},
+  {"question": "How many Software Engineers are there?", "gold_sql": "SELECT COUNT(*) FROM employees WHERE role = 'Software Engineer'"}
+]

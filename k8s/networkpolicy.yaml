@@ -1,0 +1,63 @@
+# Default-deny ingress for the namespace, then open only the paths the app needs.
+# (Enforced only if the CNI supports NetworkPolicy - e.g. Calico, Cilium, AWS VPC CNI with policy enabled.)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: agentic-ai
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-from-ingress-and-ui
+  namespace: agentic-ai
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: agentic-api }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: ingress-nginx }
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: agentic-ui }
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: monitoring }  # Prometheus scrapes
+      ports:
+        - port: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ui-from-ingress
+  namespace: agentic-ai
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: agentic-ui }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: ingress-nginx }
+      ports:
+        - port: 8501
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: data-from-api-only
+  namespace: agentic-ai
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: app.kubernetes.io/name, operator: In, values: [postgres, redis, ollama] }
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: agentic-api }
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: agentic-bootstrap }

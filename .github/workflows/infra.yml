@@ -1,0 +1,61 @@
+name: infra
+
+on:
+  pull_request:
+    paths: ["terraform/**", "k8s/**", "helm/**", "monitoring/**", ".github/workflows/infra.yml"]
+  push:
+    branches: [main]
+    paths: ["terraform/**", "k8s/**", "helm/**", "monitoring/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: terraform }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: "1.13.3" }
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+      - name: terraform plan (mock AWS credentials - nothing is created, $0)
+        run: terraform plan -input=false -lock=false -var mock_aws=true -out=tfplan
+      - name: Summarise plan
+        run: terraform show -no-color tfplan | grep -E "^Plan:" >> "$GITHUB_STEP_SUMMARY"
+
+  kubernetes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Install kubeconform
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz | tar xz
+          sudo mv kubeconform /usr/local/bin/
+      - name: Validate raw manifests
+        run: kubeconform -strict -summary -ignore-filename-pattern kustomization.yaml -kubernetes-version 1.31.0 k8s/
+      - name: Helm lint
+        run: |
+          helm lint helm/agentic-ai --set secrets.jwtSecret=x,secrets.adminPassword=x,secrets.postgresPassword=x
+          helm lint helm/agentic-ai -f helm/agentic-ai/values-aws.yaml
+      - name: Render chart and validate (local + AWS values)
+        run: |
+          CRDS='https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+          helm template agentic-ai helm/agentic-ai --set secrets.jwtSecret=x,secrets.adminPassword=x,secrets.postgresPassword=x \
+            | kubeconform -strict -summary -kubernetes-version 1.31.0 -schema-location default -schema-location "$CRDS"
+          helm template agentic-ai helm/agentic-ai -f helm/agentic-ai/values-aws.yaml \
+            | kubeconform -strict -summary -kubernetes-version 1.31.0 -schema-location default -schema-location "$CRDS"
+
+  monitoring:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: promtool check
+        run: |
+          docker run --rm -v "$PWD/monitoring/prometheus:/p" --entrypoint promtool prom/prometheus:v3.5.0 check rules /p/alerts.yml
+      - name: Dashboard JSON is valid
+        run: python -m json.tool monitoring/grafana/dashboards/agentic-ai.json > /dev/null

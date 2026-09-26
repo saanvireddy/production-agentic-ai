@@ -1,0 +1,47 @@
+groups:
+  - name: agentic-api
+    rules:
+      - alert: ApiDown
+        expr: up{job="agentic-api"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "Agentic API is down"
+
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+            / clamp_min(sum(rate(http_requests_total[5m])), 1e-9) > 0.05
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "More than 5% of requests are failing"
+
+      - alert: ChatLatencyHigh
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{path="/api/v1/chat"}[5m]))) > 20
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "p95 /chat latency above 20s (LLM saturated?)"
+
+      - alert: LLMErrors
+        expr: sum(rate(llm_requests_total{status="error"}[5m])) > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "LLM calls are failing (is Ollama up and the model pulled?)"
+
+      - alert: RetrievalQualityDrop
+        expr: |
+          histogram_quantile(0.5, sum by (le) (rate(rag_top_score_bucket[30m]))) < 0.4
+        for: 30m
+        labels: { severity: info }
+        annotations:
+          summary: "Median top retrieval score dropped - possible embedding/model drift or new question topics"
+
+      - alert: GuardrailBlockSpike
+        expr: sum(increase(guardrail_blocks_total[10m])) > 20
+        labels: { severity: info }
+        annotations:
+          summary: "Unusual number of guardrail blocks (possible abuse / prompt injection attempts)"

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentic-api
+  namespace: agentic-ai
+  labels: { app.kubernetes.io/name: agentic-api, app.kubernetes.io/part-of: agentic-ai }
+spec:
+  type: ClusterIP
+  selector: { app.kubernetes.io/name: agentic-api }
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

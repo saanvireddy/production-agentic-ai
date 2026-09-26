@@ -1,0 +1,11 @@
+# cp terraform.tfvars.example terraform.tfvars   (git-ignored)
+project            = "agentic-ai"
+environment        = "dev"
+aws_region         = "us-east-1"
+availability_zones = ["us-east-1a", "us-east-1b"]
+
+# Keep true to plan with no AWS account ($0). Set false + real credentials to deploy.
+mock_aws = true
+
+github_repository = "your-github-user/production-agentic-ai"
+# cluster_admin_principal_arns = ["arn:aws:iam::123456789012:role/Admin"]

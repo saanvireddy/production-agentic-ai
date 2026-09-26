@@ -1,0 +1,106 @@
+name: evaluation
+
+on:
+  pull_request:
+    paths: ["app/**", "data/**", "requirements*.txt", ".github/workflows/evaluation.yml"]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"   # weekly full LLM evaluation
+  workflow_dispatch:
+    inputs:
+      llm_model: { description: "Ollama model under test", default: "llama3.2:3b" }
+      judge_model: { description: "Ollama judge model for Ragas", default: "llama3.1:8b" }
+
+permissions:
+  contents: read
+
+jobs:
+  # Fast, deterministic regression gate on every PR: retrieval quality over real pgvector.
+  retrieval-gate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env: { POSTGRES_USER: agentic, POSTGRES_PASSWORD: agentic, POSTGRES_DB: agentic }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U agentic" --health-interval 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://agentic:agentic@localhost:5432/agentic
+      EMBEDDING_PROVIDER: hash
+      LLM_PROVIDER: fake
+      ADMIN_PASSWORD: ci-admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip, cache-dependency-path: requirements*.txt }
+      - run: pip install -r requirements.txt
+      - run: python -m app.database.bootstrap
+      - name: Retrieval evaluation (fails the PR below threshold)
+        run: python -m app.evaluation.retrieval --min-hit-rate 0.9 --min-mrr 0.85
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: retrieval-eval, path: reports/ }
+
+  # Full end-to-end evaluation with a real local LLM (Ollama on the runner) + Ragas LLM-as-judge.
+  # Slow on CPU runners, so it runs weekly, on main, or on demand - not on every PR.
+  llm-eval:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env: { POSTGRES_USER: agentic, POSTGRES_PASSWORD: agentic, POSTGRES_DB: agentic }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U agentic" --health-interval 5s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    env:
+      DATABASE_URL: postgresql://agentic:agentic@localhost:5432/agentic
+      REDIS_URL: redis://localhost:6379/0
+      OLLAMA_URL: http://localhost:11434
+      LLM_MODEL: ${{ inputs.llm_model || 'llama3.2:3b' }}
+      EVAL_JUDGE_MODEL: ${{ inputs.judge_model || 'llama3.1:8b' }}
+      JWT_SECRET: ci-only-secret-not-used-anywhere-else-000
+      ADMIN_PASSWORD: ci-admin
+      RATE_LIMIT_PER_MINUTE: "1000"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip, cache-dependency-path: requirements*.txt }
+      - name: Install Ollama and pull models
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          (ollama serve > ollama.log 2>&1 &)
+          sleep 5
+          ollama pull nomic-embed-text
+          ollama pull "$LLM_MODEL"
+          ollama pull "$EVAL_JUDGE_MODEL"
+      - run: pip install -r requirements.txt
+      - name: Start API
+        run: |
+          (uvicorn app.main:app --port 8000 > api.log 2>&1 &)
+          for i in $(seq 1 60); do curl -sf localhost:8000/api/v1/health/ready && break; sleep 5; done
+      - name: SQL execution accuracy
+        run: python -m app.evaluation.sql_eval --min-accuracy 0.7
+      - name: Ragas evaluation
+        run: |
+          python -m venv .venv-eval
+          .venv-eval/bin/pip install -r requirements-eval.txt
+          .venv-eval/bin/python -m app.evaluation.ragas_eval --api http://localhost:8000 \
+            --password "$ADMIN_PASSWORD" --judge-model "$EVAL_JUDGE_MODEL" \
+            --min-faithfulness 0.6 --min-answer-relevancy 0.6
+      - name: Publish summary
+        if: always()
+        run: |
+          [ -f reports/ragas_eval.md ] && cat reports/ragas_eval.md >> "$GITHUB_STEP_SUMMARY" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: llm-eval
+          path: |
+            reports/
+            api.log
+            ollama.log

@@ -1,0 +1,137 @@
+# Default values: a self-contained install for a local cluster (kind / minikube / Docker Desktop).
+# See values-aws.yaml for the EKS overlay (ECR image, RDS, ElastiCache, Secrets Manager, ALB).
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: production-agentic-ai
+  tag: ""            # defaults to .Chart.AppVersion
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}    # EKS IRSA: eks.amazonaws.com/role-arn: arn:aws:iam::<acct>:role/<role>
+
+replicaCount: 2
+
+config:
+  ENVIRONMENT: staging
+  LOG_LEVEL: INFO
+  LLM_PROVIDER: ollama
+  LLM_MODEL: "llama3.2:3b"
+  EMBEDDING_PROVIDER: ollama
+  EMBEDDING_MODEL: nomic-embed-text
+  RETRIEVAL_TOP_K: "4"
+  RETRIEVAL_MIN_SCORE: "0.35"
+  RATE_LIMIT_PER_MINUTE: "30"
+  OTEL_ENABLED: "false"
+  OTEL_EXPORTER_ENDPOINT: "http://otel-collector.observability:4317"
+
+# Override when using managed services (RDS / ElastiCache / external Ollama).
+externalUrls:
+  redisUrl: ""       # default: in-chart redis
+  ollamaUrl: ""      # default: in-chart ollama
+
+secrets:
+  # create=true renders a Kubernetes Secret from the values below (local only - pass with --set, never commit).
+  # create=false expects `existingSecret` to exist, or externalSecrets.enabled to sync it from AWS.
+  create: true
+  existingSecret: ""
+  jwtSecret: ""
+  adminUsername: admin
+  adminPassword: ""
+  postgresUser: agentic
+  postgresPassword: ""
+  postgresDb: agentic
+  databaseUrl: ""    # default: built from the in-chart postgres
+
+externalSecrets:
+  enabled: false
+  refreshInterval: 1h
+  secretStoreRef: { name: aws-secrets-manager, kind: ClusterSecretStore }
+  remoteKey: agentic-ai/dev/app   # JSON secret (terraform output app_secret_name); with JWT_SECRET, ADMIN_*, DATABASE_URL, POSTGRES_*
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  host: agentic.local
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/limit-rps: "20"
+  tls: []
+  #  - secretName: agentic-tls
+  #    hosts: [agentic.example.com]
+
+resources:
+  requests: { cpu: 250m, memory: 384Mi }
+  limits: { cpu: "1", memory: 1Gi }
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+networkPolicy:
+  enabled: true
+  ingressNamespace: ingress-nginx
+  monitoringNamespace: monitoring
+
+bootstrap:
+  enabled: true      # Helm hook Job: migrations + seed + ingestion
+
+serviceMonitor:
+  enabled: false     # requires the Prometheus Operator CRDs (kube-prometheus-stack)
+  interval: 15s
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+ui:
+  enabled: true
+  image:
+    repository: production-agentic-ai-ui
+    tag: ""
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+# ---- In-chart dependencies (disable when using managed AWS services) ----
+postgresql:
+  enabled: true
+  image: pgvector/pgvector:pg16
+  storage: 5Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 1Gi }
+
+redis:
+  enabled: true
+  image: redis:7-alpine
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 500m, memory: 320Mi }
+
+ollama:
+  enabled: true
+  image: ollama/ollama:latest
+  models: ["nomic-embed-text", "llama3.2:3b"]
+  storage: 10Gi
+  resources:
+    requests: { cpu: "1", memory: 4Gi }
+    limits: { cpu: "4", memory: 8Gi }

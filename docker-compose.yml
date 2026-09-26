@@ -1,0 +1,153 @@
+# Local production-like stack.
+#
+#   cp .env.example .env
+#   docker compose up -d --build                     # uses Ollama running natively on your machine
+#   docker compose --profile ollama up -d --build    # runs Ollama in a container instead (Linux / NVIDIA)
+#
+# API        http://localhost:8000/docs
+# UI         http://localhost:8501
+# Grafana    http://localhost:3000   (admin / admin)
+# Prometheus http://localhost:9090
+# Jaeger     http://localhost:16686  (OpenTelemetry traces)
+
+name: agentic-ai
+
+x-api-env: &api-env
+  ENVIRONMENT: local
+  DATABASE_URL: postgresql://${POSTGRES_USER:-agentic}:${POSTGRES_PASSWORD:-agentic}@postgres:5432/${POSTGRES_DB:-agentic}
+  REDIS_URL: redis://redis:6379/0
+  OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+  LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+  LLM_MODEL: ${LLM_MODEL:-llama3.2:3b}
+  EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-ollama}
+  EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+  RETRIEVAL_MIN_SCORE: ${RETRIEVAL_MIN_SCORE:-0.35}
+  JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+  ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+  RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-30}
+  OTEL_ENABLED: "true"
+  OTEL_EXPORTER_ENDPOINT: http://jaeger:4317
+  LOG_LEVEL: INFO
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agentic}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agentic}
+      POSTGRES_DB: ${POSTGRES_DB:-agentic}
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-extensions.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru", "--save", ""]
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args: { APP_VERSION: local }
+    image: production-agentic-ai:latest
+    environment: *api-env
+    ports: ["8000:8000"]
+    extra_hosts: ["host.docker.internal:host-gateway"]  # reach native Ollama from Linux Docker too
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: .
+      dockerfile: docker/ui.Dockerfile
+    image: production-agentic-ai-ui:latest
+    environment:
+      API_URL: http://api:8000
+    ports: ["8501:8501"]
+    depends_on: [api]
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - promdata:/prometheus
+    ports: ["9090:9090"]
+    depends_on: [api]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafanadata:/var/lib/grafana
+    ports: ["3000:3000"]
+    depends_on: [prometheus]
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.73.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"  # UI
+      - "4317:4317"    # OTLP gRPC
+    restart: unless-stopped
+
+  # ---- Optional: Ollama in a container (docker compose --profile ollama up) ----
+  ollama:
+    profiles: ["ollama"]
+    image: ollama/ollama:latest
+    ports: ["11434:11434"]
+    volumes: [ollama:/root/.ollama]
+    restart: unless-stopped
+    # Uncomment for NVIDIA GPUs:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices: [{ driver: nvidia, count: all, capabilities: [gpu] }]
+
+  ollama-init:
+    profiles: ["ollama"]
+    image: ollama/ollama:latest
+    entrypoint: ["/bin/sh", "/init.sh"]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      LLM_MODEL: ${LLM_MODEL:-llama3.2:3b}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+    volumes: ["./docker/ollama-init.sh:/init.sh:ro"]
+    depends_on: [ollama]
+    restart: "no"
+
+volumes:
+  pgdata:
+  promdata:
+  grafanadata:
+  ollama:

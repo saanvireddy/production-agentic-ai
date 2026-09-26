@@ -1,0 +1,49 @@
+# EKS overlay:  helm upgrade --install agentic-ai helm/agentic-ai -n agentic-ai \
+#                 -f helm/agentic-ai/values-aws.yaml --set image.tag=<git-sha>
+image:
+  repository: 123456789012.dkr.ecr.us-east-1.amazonaws.com/production-agentic-ai  # from `terraform output ecr_repository_url`
+  pullPolicy: Always
+
+serviceAccount:
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/agentic-ai-dev-app  # `terraform output app_irsa_role_arn`
+
+config:
+  ENVIRONMENT: production
+  OTEL_ENABLED: "true"
+
+externalUrls:
+  redisUrl: rediss://master.agentic-ai-dev.xxxxxx.use1.cache.amazonaws.com:6379/0
+  ollamaUrl: http://ollama.llm.svc.cluster.local:11434  # GPU node group, or swap LLM_PROVIDER for Bedrock
+
+secrets:
+  create: false
+externalSecrets:
+  enabled: true      # External Secrets Operator syncs from AWS Secrets Manager (terraform creates the secret)
+
+ingress:
+  className: alb
+  host: agentic.example.com
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=300
+
+networkPolicy:
+  ingressNamespace: kube-system
+
+autoscaling:
+  minReplicas: 2
+  maxReplicas: 10
+
+serviceMonitor:
+  enabled: true
+
+postgresql:
+  enabled: false     # Amazon RDS for PostgreSQL (pgvector) - DATABASE_URL comes from Secrets Manager
+redis:
+  enabled: false     # Amazon ElastiCache
+ollama:
+  enabled: false

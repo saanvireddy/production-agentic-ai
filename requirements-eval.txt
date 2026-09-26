@@ -1,0 +1,7 @@
+# Separate environment for Ragas (LLM-as-judge) evaluation.
+# ragas 0.4.x still imports modules removed in langchain-community 0.4, so it cannot share
+# the app's environment. The evaluator talks to the API over HTTP, so it doesn't need to.
+ragas==0.4.3
+langchain-community>=0.3.31,<0.4
+langchain-ollama>=0.3.10,<1.0
+httpx==0.28.1

@@ -1,0 +1,37 @@
+# NGINX Ingress: single entry point. /api -> FastAPI, / -> Streamlit UI.
+# Local: add "127.0.0.1 agentic.local" to /etc/hosts.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agentic-ai
+  namespace: agentic-ai
+  labels: { app.kubernetes.io/part-of: agentic-ai }
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"   # local LLM generations can be slow
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"      # document uploads
+    nginx.ingress.kubernetes.io/limit-rps: "20"             # edge rate limit (per client IP)
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "3"
+    nginx.ingress.kubernetes.io/enable-cors: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: agentic.local
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service: { name: agentic-api, port: { name: http } }
+          - path: /docs
+            pathType: Prefix
+            backend:
+              service: { name: agentic-api, port: { name: http } }
+          - path: /openapi.json
+            pathType: ImplementationSpecific
+            backend:
+              service: { name: agentic-api, port: { name: http } }
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: agentic-ui, port: { name: http } }

@@ -1,0 +1,14 @@
+Agentic AI platform deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+{{- if .Values.ingress.enabled }}
+  UI:        http://{{ .Values.ingress.host }}/
+  API docs:  http://{{ .Values.ingress.host }}/docs
+{{- else }}
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "agentic.fullname" . }}-api 8000:80
+{{- end }}
+
+Watch the bootstrap job (migrations, seed, ingestion):
+  kubectl -n {{ .Release.Namespace }} logs job/{{ include "agentic.fullname" . }}-bootstrap -f
+
+Autoscaling:
+  kubectl -n {{ .Release.Namespace }} get hpa {{ include "agentic.fullname" . }}-api -w

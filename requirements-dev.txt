@@ -1,0 +1,7 @@
+-r requirements.txt
+pytest==9.1.1
+pytest-asyncio==1.4.0
+fakeredis==2.38.0
+ruff==0.16.9
+reportlab==5.0.1   # scripts/generate_sample_docs.py
+locust==2.46.6     # load testing
