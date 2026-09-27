@@ -35,3 +35,17 @@ The chart render check found and fixed a real bug (duplicate `app.kubernetes.io/
 | `helm lint` with the real helm binary | binary unavailable | `make helm-lint`; `infra.yml` |
 | `terraform init/validate/plan` | provider registry unavailable | `make tf-plan`; `infra.yml` |
 | A live Kubernetes cluster (HPA scaling, Ingress) | no cluster images | `make k8s-up` |
+
+
+## Verified on a Windows laptop (Docker Desktop, native Ollama)
+
+| Check | Result |
+|---|---|
+| `docker compose up` with Ollama (`llama3.2:3b`, `nomic-embed-text`) | all services healthy; UI answered SQL, follow-up, RAG and blocked the destructive request |
+| Retrieval eval (nomic-embed-text) | hit@4 1.000, page recall 1.000, hit@1 0.938, MRR 0.958 |
+| SQL execution accuracy (`llama3.2:3b`) | 70% (7/10) |
+| Ragas (`llama3.1:8b` judge) | faithfulness 0.689, answer relevancy 0.743, context precision 0.724, context recall 0.700 |
+| kind cluster + NGINX Ingress + metrics-server + Helm release | 2 API pods, HPA reading metrics, bootstrap Job completed, UI answered via http://agentic.local |
+| `terraform fmt / init / validate / plan -var mock_aws=true` | valid; `Plan: 71 to add, 0 to change, 0 to destroy` |
+
+Bugs found and fixed during this run: the `/openapi.json` ingress path needed `pathType: ImplementationSpecific` (ingress-nginx strict path validation), the kind ingress controller had to be pinned to the control-plane node that owns the host port mapping, and the data-tier security-group rules needed static `for_each` keys so `terraform plan` can run before the security groups exist.

@@ -1,0 +1,11 @@
+# kind only forwards host ports 80/443 to the control-plane node (see kind-config.yaml),
+# so pin the NGINX controller there.
+spec:
+  template:
+    spec:
+      nodeSelector:
+        ingress-ready: "true"
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule

@@ -18,13 +18,14 @@ if ! kind get clusters | grep -qx "$CLUSTER"; then
 fi
 
 echo ">> NGINX Ingress"
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.13.2/deploy/static/provider/kind/deploy.yaml
-kubectl -n ingress-nginx rollout status deploy/ingress-nginx-controller --timeout=180s
+kubectl apply -f https://kind.sigs.k8s.io/examples/ingress/deploy-ingress-nginx.yaml
+kubectl -n ingress-nginx patch deployment ingress-nginx-controller --patch-file scripts/kind/ingress-controller-patch.yaml
+kubectl -n ingress-nginx rollout status deployment ingress-nginx-controller --timeout=300s
 
 echo ">> metrics-server (HPA needs CPU/memory metrics)"
 kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
 kubectl -n kube-system patch deploy metrics-server --type=json \
-  -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]' || true
+  --patch-file scripts/kind/metrics-server-patch.json || true
 
 echo ">> Build and load images"
 docker build -t production-agentic-ai:1.0.0 .

@@ -28,7 +28,7 @@ spec:
             backend:
               service: { name: agentic-api, port: { name: http } }
           - path: /openapi.json
-            pathType: ImplementationSpecific
+            pathType: ImplementationSpecific  
             backend:
               service: { name: agentic-api, port: { name: http } }
           - path: /

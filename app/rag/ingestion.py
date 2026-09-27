@@ -86,7 +86,11 @@ def ingest_bytes(
     if len(data) > MAX_UPLOAD_BYTES:
         raise ValueError("file too large (max 10 MB)")
 
-    checksum = hashlib.sha256(data).hexdigest()
+    # The checksum covers the file AND the embedding model, so switching models (e.g. from the
+    # offline hash embeddings to nomic-embed-text) automatically re-embeds instead of silently
+    # mixing vectors from two different embedding spaces.
+    s = get_settings()
+    checksum = f"{hashlib.sha256(data).hexdigest()}:{s.embedding_provider}:{s.embedding_model}"
     if not force and store.get_checksum(filename) == checksum:
         existing = next((d for d in store.list_documents() if d.filename == filename), None)
         return IngestResult(
