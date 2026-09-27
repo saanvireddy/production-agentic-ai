@@ -56,13 +56,10 @@ jobs:
           docker rm -f api
 
       - name: Scan image for vulnerabilities (Trivy)
-        uses: aquasecurity/trivy-action@0.33.1
-        with:
-          image-ref: ${{ env.IMAGE }}:${{ github.sha }}
-          format: sarif
-          output: trivy.sarif
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/out" aquasec/trivy:latest \
+            image --format sarif --output /out/trivy.sarif --severity CRITICAL,HIGH --ignore-unfixed \
+            "${{ env.IMAGE }}:${{ github.sha }}"
       - uses: github/codeql-action/upload-sarif@v3
         if: always() && github.event_name != 'pull_request'
         with: { sarif_file: trivy.sarif }
