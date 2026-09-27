@@ -45,7 +45,7 @@ jobs:
   # Full end-to-end evaluation with a real local LLM (Ollama on the runner) + Ragas LLM-as-judge.
   # Slow on CPU runners, so it runs weekly, on main, or on demand - not on every PR.
   llm-eval:
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     services:
