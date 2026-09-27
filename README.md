@@ -329,4 +329,22 @@ The SQL tool reads two tables and doesn't join across RAG and SQL in one answer 
 
 ## Screenshots
 
-Capture these once the stack runs with Ollama and drop them in `docs/images/`: the UI answering a RAG question with citations and a SQL question with the generated query, the Grafana overview dashboard under load, a Jaeger trace of a `/chat` request, `kubectl get pods,hpa` during a load test, and the Ragas results table from `reports/ragas_eval.md`.
+**Chat UI**: SQL and RAG answers with sources, guardrail status and latency.
+
+![Chat UI](docs/images/ui-chat.png)
+
+**Grafana**: request rate, error rate, p95 latency, router decisions, RAG/SQL traffic and process resources.
+
+![Grafana dashboard](docs/images/grafana.png)
+
+**Jaeger (OpenTelemetry)**: one `/chat` request end to end. Routing takes 90 us and the SQL query 10 ms; the two LLM calls take 9.8 s and 6.7 s of the 16.5 s total on CPU.
+
+![Jaeger trace](docs/images/jaeger-trace.png)
+
+**Kubernetes (kind)**: two API replicas behind NGINX Ingress, HPA active, bootstrap Job completed.
+
+![Kubernetes pods](docs/images/k8s-pods.png)
+
+**Ragas evaluation**: `llama3.2:3b` answering, `llama3.1:8b` judging, 16 questions.
+
+![Evaluation results](docs/images/eval-results.png)
